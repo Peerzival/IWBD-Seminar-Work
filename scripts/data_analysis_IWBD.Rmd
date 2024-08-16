@@ -38,7 +38,7 @@ library(patchwork)
 
 ```{r}
 # Hier deinen Pfad zur Excel-Datei einfügen
-excel_path = "/Users/max/Desktop/IWB data all 2024.xlsx"
+excel_path = ""
 data = read_excel(excel_path, sheet = "Data_scale_values", na = c("", " "))
 ```
 
@@ -57,7 +57,7 @@ data$DATE = as.Date(data$DATE)
 
 ```{r}
 # Hier deine ID einfügen
-id = "b6qf9a7z"
+id = ""
 
 new <- c('Cognitive_Well_Being', 'Affective_Well_Being_Positive', 'Affective_Well_Being_Negative')
 old_daily <- c('EV_Cognitive_Well_Being', 'EV_Affective_Well_Being_Positive', 'EV_Affective_Well_Being_Negative')
@@ -213,7 +213,7 @@ print(differences_plot)
 
 ```{r}
 # Hier deinen Pfad zur Excel-Datei einfügen
-excel_path = "/Users/max/Desktop/IWB data all 2024.xlsx"
+excel_path = ""
 data = read_excel(excel_path, sheet = "Data_scale_values", na = c("", " "))
 ```
 
@@ -232,7 +232,7 @@ data$DATE = as.Date(data$DATE)
 
 ```{r}
 # Hier deine ID einfügen
-id = "b6qf9a7z"
+id = ""
 
 # Define start and end dates
 start_date <- as.Date("2024-06-24")
@@ -321,7 +321,7 @@ print(correlation_matrix_plot)
 
 ```{r}
 # Hier deinen Pfad zur Excel-Datei einfügen
-excel_path = "/Users/max/Desktop/IWB data all 2024.xlsx"
+excel_path = ""
 data = read_excel(excel_path, sheet = "Data_scale_values", na = c("", " "))
 ```
 
@@ -340,7 +340,7 @@ data$DATE = as.Date(data$DATE)
 
 ```{r}
 # Hier deine ID einfügen
-id = "b6qf9a7z"
+id = ""
 
 # Define start and end dates
 start_date <- as.Date("2024-06-24")
@@ -538,7 +538,7 @@ print(activity_yes_no_plot)
 
 ```{r}
 # Hier deinen Pfad zur Excel-Datei einfügen
-excel_path = "/Users/max/Desktop/IWB data all 2024.xlsx"
+excel_path = ""
 data = read_excel(excel_path, sheet = "Data_scale_values", na = c("", " "))
 ```
 
@@ -557,7 +557,7 @@ data$DATE = as.Date(data$DATE)
 
 ```{r}
 # Hier deine ID einfügen
-id = "b6qf9a7z"
+id = ""
 
 # Define start and end dates
 start_date <- as.Date("2024-06-24")
@@ -678,7 +678,7 @@ print(combined_plot)
 
 ```{r}
 # Hier deinen Pfad zur Excel-Datei einfügen
-excel_path = "/Users/max/Desktop/IWB data all 2024.xlsx"
+excel_path = ""
 data = read_excel(excel_path, sheet = "Data_scale_values", na = c("", " "))
 ```
 
@@ -697,7 +697,7 @@ data$DATE = as.Date(data$DATE)
 
 ```{r}
 # Hier deine ID einfügen
-id = "b6qf9a7z"
+id = ""
 
 # Define start and end dates
 start_date <- as.Date("2024-06-24")
@@ -826,7 +826,7 @@ print(combined_plot)
 
 ```{r}
 # Hier deinen Pfad zur Excel-Datei einfügen
-excel_path = "/Users/max/Desktop/IWB data all 2024.xlsx"
+excel_path = ""
 data = read_excel(excel_path, sheet = "Data_active_time", na = c("", " "))
 ```
 
