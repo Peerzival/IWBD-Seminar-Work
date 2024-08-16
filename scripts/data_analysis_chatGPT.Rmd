@@ -1,0 +1,33 @@
+---
+title: "data_analysis_IWBD"
+output: html_document
+date: "2024-08-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Improve Well Being With Data Analytics
+
+**Load relevant dependencies**
+
+```{r}
+# Load libraries
+library(dplyr)
+library(readxl)
+library(lubridate)
+library(lmerTest)
+library(tidyr)    # For data reshaping
+library(ggplot2)  # For creating plots
+library(RColorBrewer) # For color palettes
+library(ggcorrplot) # For creating correlation plots
+library(wesanderson) # For color palettes
+library(plm) # For panel data analysis
+library(broom) # For extracting coefficients from models
+library(car)
+library(scales)
+library(patchwork)
+```
+
+## ddd

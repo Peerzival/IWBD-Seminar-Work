@@ -1,0 +1,985 @@
+---
+title: "data_analysis_IWBD"
+output: html_document
+date: "2024-08-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Improve Well Being With Data Analytics
+
+## Analyse subjective data
+
+**Load relevant dependencies**
+
+```{r}
+# Load libraries
+library(dplyr)
+library(readxl)
+library(lubridate)
+library(lmerTest)
+library(tidyr)    # For data reshaping
+library(ggplot2)  # For creating plots
+library(RColorBrewer) # For color palettes
+library(ggcorrplot) # For creating correlation plots
+library(wesanderson) # For color palettes
+library(plm) # For panel data analysis
+library(broom) # For extracting coefficients from models
+library(car)
+library(scales)
+library(patchwork)
+```
+
+### Plot differences in well being
+
+**Load data**
+
+```{r}
+# Hier deinen Pfad zur Excel-Datei einfügen
+excel_path = "/Users/max/Desktop/IWB data all 2024.xlsx"
+data = read_excel(excel_path, sheet = "Data_scale_values", na = c("", " "))
+```
+
+**Data cleaning**
+
+```{r}
+# convert ID to factor
+data$ID = as.factor(data$ID)
+
+data$STARTED = as.POSIXct(data$STARTED) # POSIXct: contains date and time info
+
+data$DATE = as.Date(data$DATE)
+```
+
+**Get relevant column data**
+
+```{r}
+# Hier deine ID einfügen
+id = "b6qf9a7z"
+
+new <- c('Cognitive_Well_Being', 'Affective_Well_Being_Positive', 'Affective_Well_Being_Negative')
+old_daily <- c('EV_Cognitive_Well_Being', 'EV_Affective_Well_Being_Positive', 'EV_Affective_Well_Being_Negative')
+old_basis <- c('BS_Cognitive_Well_Being', 'BS_Affective_Well_Being', 'BS_Affective_Well_Being_Negative')
+
+necessary_basis_columns <- c('BS_Cognitive_Well_Being', 'BS_Affective_Well_Being', 'BS_Affective_Well_Being_Negative')
+necessary_daily_columns <- c('EV_Cognitive_Well_Being', 'EV_Affective_Well_Being_Positive', 'EV_Affective_Well_Being_Negative')
+
+basis_median <- data %>% 
+  filter(QUESTNNR == "Basis_Survey") %>% 
+  filter(ID != id) %>%
+  select(all_of(necessary_basis_columns), -ID, -DATE, -STARTED, -IV) %>%
+  mutate(across(all_of(necessary_basis_columns), as.numeric)) %>%
+  summarise(across(everything(), median)) %>%
+  select(where(~!is.na(.)))
+  
+my_basis_survey <- data %>% 
+  filter(QUESTNNR == "Basis_Survey") %>% 
+  filter(ID == id) %>%
+  select(all_of(necessary_basis_columns), -ID, -DATE, -STARTED, -IV) %>%
+  mutate(across(all_of(necessary_basis_columns), as.numeric)) %>%
+  summarise(across(everything(), median)) %>%
+  select(where(~!is.na(.)))
+
+basis_daily_median <- data %>% 
+  filter(QUESTNNR == "Daily_Evening_Survey") %>%
+  filter(WEEK==27) %>%
+  filter(EV_Activity_Check==2) %>%
+  filter(ID != id) %>%
+  select(all_of(necessary_daily_columns), -ID, -DATE, -STARTED, -IV) %>%
+  mutate(across(all_of(necessary_daily_columns), as.numeric)) %>%
+  summarise(across(everything(), median)) %>%
+  select(where(~!is.na(.)))
+
+my_basis_daily_survey <- data %>% 
+  filter(QUESTNNR == "Daily_Evening_Survey") %>% 
+  filter(WEEK==27) %>%
+  filter(EV_Activity_Check==2) %>%
+  filter(ID == id) %>% 
+  select(all_of(necessary_daily_columns), -ID, -DATE, -STARTED, -IV) %>%
+  mutate(across(all_of(necessary_daily_columns), as.numeric)) %>%
+  select(where(~!all(is.na(.)))) %>%
+  summarise(across(everything(), median))
+
+# Select relevant columns from my_basis_daily_survey
+my_basis_daily_results <- my_basis_daily_survey %>%
+  select(all_of(necessary_daily_columns)) %>%
+  mutate(Group = "Your Results")
+
+# Select relevant columns from basis_daily_median
+median_basis_daily_results <- basis_daily_median %>%
+  select(all_of(necessary_daily_columns)) %>%
+  mutate(Group = "Median Results")
+
+my_basis_results <- my_basis_survey %>%
+  select(all_of(necessary_basis_columns)) %>%
+  mutate(Group = "Your Results")
+
+median_basis_results <- basis_median %>%
+  select(all_of(necessary_basis_columns)) %>%
+  mutate(Group = "Median Results")
+
+# Select relevant columns from my_basis_daily_survey
+end_results_me <- my_basis_daily_survey %>%
+  select(all_of(necessary_daily_columns))
+
+end_results_me <- end_results_me %>% 
+  rename_with(~ new, all_of(old_daily))
+
+# Select relevant columns from basis_daily_median
+end_results_other <- basis_daily_median %>%
+  select(all_of(necessary_daily_columns))
+
+end_results_other <- end_results_other %>% 
+  rename_with(~ new, all_of(old_daily))
+
+start_results_me <- my_basis_survey %>%
+  select(BS_Cognitive_Well_Being, 
+         BS_Affective_Well_Being, 
+         BS_Affective_Well_Being_Negative)
+
+start_results_me <- start_results_me %>% 
+  rename_with(~ new, all_of(old_basis))
+
+start_results_others <- basis_median %>%
+  select(all_of(necessary_basis_columns))
+
+start_results_others <- start_results_others %>% 
+  rename_with(~ new, all_of(old_basis))
+
+difference_me <- end_results_me - start_results_me
+difference_others <- end_results_other - start_results_others
+
+difference_me <- difference_me %>% 
+  mutate(Group = "My Results")
+
+difference_others <- difference_others %>%
+  mutate(Group = "Other Results")
+
+combined_results <- rbind(difference_me, difference_others)
+
+plot_data <- combined_results %>%
+  pivot_longer(cols = c(Cognitive_Well_Being, 
+                        Affective_Well_Being_Positive, 
+                        Affective_Well_Being_Negative),
+               names_to = "Measure", 
+               values_to = "Score")
+```
+
+**Plotting differences in well being**
+
+```{r}
+all_colors <- wes_palette("Darjeeling2")
+selected_colors <- all_colors[c(2,1)]
+
+ggplot(plot_data, aes(x = Measure, y = Score, fill = Group)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.8) +
+  geom_text(aes(label = round(Score, 2)), 
+            position = position_dodge(width = 0.9), 
+            vjust = -0.5, color = "black", size = 3) +
+  labs(x = "Well Being Categories", 
+       y = "Difference",
+       fill = "Data Source") +
+  scale_x_discrete(limits = c("Cognitive_Well_Being", 
+                              "Affective_Well_Being_Positive", 
+                              "Affective_Well_Being_Negative"),
+                   labels = c("Cognitive", "Affective Positive", "Affective Negative")) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = 8, angle = 45, hjust = 1),
+    axis.title.x =  element_text(size = 9, face = "bold"),
+    axis.title.y = element_text(size = 9, face = "bold"),
+    legend.title = element_text(size = 8, face = "bold"),
+    legend.key.size = unit(0.3,"cm"),
+    legend.text = element_text(size = 7), 
+    legend.position = "top",
+    legend.justification='left',
+    legend.box = "horizontal",
+     panel.background = element_rect(fill = "grey95", color = NA),
+    panel.grid.major = element_line(color = "white"),
+    panel.grid.minor = element_line(color = "white")) +
+  scale_fill_manual(values = selected_colors, guide = guide_legend(byrow = TRUE, title.position = "top", title.hjust = 0)) +
+  ylim(min(plot_data$Score) * 1.2, max(plot_data$Score) * 1.2)
+```
+
+------------------------------------------------------------------------
+
+### Analyzing Satisfaction Over Time
+
+**Load data**
+
+```{r}
+# Hier deinen Pfad zur Excel-Datei einfügen
+excel_path = ""
+data = read_excel(excel_path, sheet = "Data_scale_values", na = c("", " "))
+```
+
+**Data cleaning**
+
+```{r}
+# convert ID to factor
+data$ID = as.factor(data$ID)
+
+data$STARTED = as.POSIXct(data$STARTED) # POSIXct: contains date and time info
+
+data$DATE = as.Date(data$DATE)
+```
+
+**Get relevant column data**
+
+```{r}
+# Hier deine ID einfügen
+id = ""
+
+# Define start and end dates
+start_date <- as.Date("2024-06-03")
+end_date <- as.Date("2024-06-16")
+
+data$between <- ifelse(data$DATE >= start_date & data$DATE <= end_date, 1, 0)
+
+data_only_free_activity <- data %>%
+  filter(between == 1) %>%
+  filter(QUESTNNR == "Daily_Evening_Survey")
+
+PITU_SAT <- data_only_free_activity %>%
+  filter(ID == id) %>%
+  select(DATE, EV_PITU_Satisfaction)  %>%
+  mutate(EV_PITU_Satisfaction = as.numeric(EV_PITU_Satisfaction))
+
+SP_SAT <- data_only_free_activity %>%
+  filter(ID == id) %>%
+  select(EV_SP_Satisfaction)  %>%
+  mutate(EV_SP_Satisfaction = as.numeric(EV_SP_Satisfaction))
+
+SM_SAT <- data_only_free_activity %>%
+  filter(ID == id) %>%
+  select(EV_SM_Satisfaction)  %>%
+  mutate(EV_SM_Satisfaction = as.numeric(EV_SM_Satisfaction))
+
+combined_data <- cbind(PITU_SAT, SP_SAT, SM_SAT)
+
+combined_data_long <- combined_data %>%
+  pivot_longer(cols = c(EV_PITU_Satisfaction, EV_SP_Satisfaction, EV_SM_Satisfaction),
+               names_to = "Satisfaction_Type",
+               values_to = "Satisfaction_Score")
+```
+
+**Plotting satisfaction over weak**
+
+```{r}
+my_colors <- brewer.pal(3, "Dark2")
+ggplot(combined_data_long, aes(x = DATE, y = Satisfaction_Score, color = Satisfaction_Type)) +
+  geom_point() +
+  geom_line() +
+  theme_minimal() +
+  theme(axis.title.x = element_text(size = 9, face = "bold"),
+        axis.text.x = element_text(size = 8),
+        axis.title.y = element_text(size = 9, face = "bold"),
+        axis.text.y = element_text(size = 8),
+        legend.title = element_text(size = 8, face = "bold"),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.3,"cm"),
+        legend.position.inside = c(0.99, 0.2),
+        legend.position = "inside",
+        legend.justification='right',
+        legend.box.background = element_rect(color = "grey95", fill = "grey95", size = 0.1),
+    legend.background = element_rect(fill = "transparent", linewidth = 0.)) +
+  labs(x = "Day",
+       y = "Satisfaction Score",
+       color = "Satisfaction Type") +
+  scale_color_manual(values = my_colors,
+                    guide = guide_legend(nrow = 3, ncol = 1, byrow = TRUE, title.position = "top", title.hjust = 0)) +
+  scale_x_date(date_breaks = "2 day", date_labels = "%d.%m")
+```
+
+------------------------------------------------------------------------
+
+### Create correlation matrix
+
+**Load data**
+
+```{r}
+# Hier deinen Pfad zur Excel-Datei einfügen
+excel_path = "/Users/max/Desktop/IWB data all 2024.xlsx"
+data = read_excel(excel_path, sheet = "Data_scale_values", na = c("", " "))
+```
+
+**Data cleaning**
+
+```{r}
+# convert ID to factor
+data$ID = as.factor(data$ID)
+
+data$STARTED = as.POSIXct(data$STARTED) # POSIXct: contains date and time info
+
+data$DATE = as.Date(data$DATE)
+```
+
+**Get relevant column data**
+
+```{r}
+# Hier deine ID einfügen
+id = "b6qf9a7z"
+
+# Define start and end dates
+start_date <- as.Date("2024-06-24")
+end_date <- as.Date("2024-07-07")
+
+# Create logical vector indicating whether entry is within activity interval, 0 = no, 1 = yes
+data$between <- ifelse(data$DATE >= start_date & data$DATE <= end_date, 1, 0)
+
+data_only_free_activity <- data %>%
+  filter(between == 1) %>%
+  filter(QUESTNNR != "Basis_Survey") %>%
+  filter(QUESTNNR != "ChatGPT_Survey") %>% 
+  filter(EV_Activity_Check == 2)
+
+PITU_EX <- data_only_free_activity %>%
+  filter(EV_Activity_Check == 2) %>%
+  filter(ID == id) %>%
+  select(EV_PITU_Experiences)  %>%
+  rowwise() %>%
+  mutate(EV_PITU_Experiences = as.numeric(EV_PITU_Experiences))
+
+SP_EX <- data_only_free_activity %>%
+  filter(EV_Activity_Check == 2) %>%
+  filter(ID == id) %>%
+  select(EV_SP_Experiences)  %>%
+  rowwise() %>%
+  mutate(EV_SP_Experiences = as.numeric(EV_SP_Experiences))
+
+SM_EX <- data_only_free_activity %>%
+  filter(EV_Activity_Check == 2) %>%
+  filter(ID == id) %>%
+  select(EV_SM_Experiences)  %>%
+  rowwise() %>%
+  mutate(EV_SM_Experiences = as.numeric(EV_SM_Experiences))
+
+cor_data <- data_only_free_activity %>%
+  filter(EV_Activity_Check==2) %>%
+  filter(ID == id) %>%
+  select(EV_Cognitive_Well_Being, 
+         EV_Affective_Well_Being_Positive, 
+         EV_Affective_Well_Being_Negative,
+         EV_Resource_Depletion) %>%
+  mutate(EV_Cognitive_Well_Being = as.numeric(EV_Cognitive_Well_Being),
+         EV_Affective_Well_Being_Positive = as.numeric(EV_Affective_Well_Being_Positive),
+         EV_Affective_Well_Being_Negative = as.numeric(EV_Affective_Well_Being_Negative),
+         EV_Resource_Depletion = as.numeric(EV_Resource_Depletion))
+
+combined_data_EX <- cbind(PITU_EX, SP_EX, SM_EX, cor_data)
+
+old_daily <- c('EV_PITU_Experiences', 'EV_SP_Experiences', 'EV_SM_Experiences', 'EV_Cognitive_Well_Being', 'EV_Affective_Well_Being_Positive', 
+               'EV_Affective_Well_Being_Negative', 'EV_Resource_Depletion')
+
+new <- c('PITU_EX', 'SP_EX', 'SM_EX', 'C_WB_AVG', 'A_WB_P_AVG', 'A_WB_N_AVG', 'RD_AVG')
+
+combined_data_EX <- combined_data_EX %>% rename_with(~ new, all_of(old_daily))
+
+correlation_matrix_EX <- cor(combined_data_EX, use = "pairwise.complete.obs")
+```
+
+**Create correlation matrix**
+
+```{r}
+correlation_matrix_sat <- cor(combined_data_EX, use = "pairwise.complete.obs")
+```
+
+**Plotting correlation matrix**
+
+```{r}
+ggcorrplot(correlation_matrix_EX, 
+           method ="square", 
+           hc.order = TRUE,
+           lab = TRUE,
+           outline.color = "white", 
+           ggtheme = ggplot2::theme_gray,
+           colors = c("#ECCBAE", "white", "#046C9A"))
+
+```
+
+------------------------------------------------------------------------
+
+### Compare satisfaction on IT, SP, and SM with cognitive well being
+
+**Load data**
+
+```{r}
+# Hier deinen Pfad zur Excel-Datei einfügen
+excel_path = "/Users/max/Desktop/IWB data all 2024.xlsx"
+data = read_excel(excel_path, sheet = "Data_scale_values", na = c("", " "))
+```
+
+**Data cleaning**
+
+```{r}
+# convert ID to factor
+data$ID = as.factor(data$ID)
+
+data$STARTED = as.POSIXct(data$STARTED) # POSIXct: contains date and time info
+
+data$DATE = as.Date(data$DATE)
+```
+
+**Get relevant column data**
+
+```{r}
+# Hier deine ID einfügen
+id = "b6qf9a7z"
+
+# Define start and end dates
+start_date <- as.Date("2024-06-24")
+end_date <- as.Date("2024-07-07")
+
+# Create logical vector indicating whether entry is within activity interval, 0 = no, 1 = yes
+data$between <- ifelse(data$DATE >= start_date & data$DATE <= end_date, 1, 0)
+
+data_only_free_activity <- data %>%
+  filter(between == 1) %>%
+  filter(QUESTNNR == "Daily_Evening_Survey") %>% 
+  filter(EV_Activity_Check == 2)
+
+
+data_only_no_activity <- data %>%
+  filter(QUESTNNR != "Basis_Survey") %>%
+  filter(QUESTNNR != "ChatGPT_Survey") %>%
+  filter(EV_Activity_Check == 1) 
+
+COG_WB_free <- data_only_free_activity %>%
+  filter(ID == id) %>%
+  select(EV_Cognitive_Well_Being)  %>%
+  rowwise() %>%
+  mutate(EV_Cognitive_Well_Being = as.numeric(EV_Cognitive_Well_Being)) %>% 
+  count(EV_Cognitive_Well_Being)
+
+COG_WB_no <- data_only_no_activity %>%
+  filter(ID == id) %>%
+  select(EV_Cognitive_Well_Being)  %>%
+  rowwise() %>%
+  mutate(EV_Cognitive_Well_Being = as.numeric(EV_Cognitive_Well_Being)) %>% 
+  count(EV_Cognitive_Well_Being)
+
+AFF_WB_P_free <- data_only_free_activity %>%
+  filter(ID == id) %>%
+  select(EV_Affective_Well_Being_Positive)  %>%
+  rowwise() %>%
+  mutate(EV_Affective_Well_Being_Positive = as.numeric(EV_Affective_Well_Being_Positive)) %>% 
+  count(EV_Affective_Well_Being_Positive)
+
+AFF_WB_P_no <- data_only_no_activity %>%
+  filter(ID == id) %>%
+  select(EV_Affective_Well_Being_Positive)  %>%
+  rowwise() %>%
+  mutate(EV_Affective_Well_Being_Positive = as.numeric(EV_Affective_Well_Being_Positive)) %>% 
+  count(EV_Affective_Well_Being_Positive)
+
+AFF_WB_N_free <- data_only_free_activity %>%
+  filter(ID == id) %>%
+  select(EV_Affective_Well_Being_Negative)  %>%
+  rowwise() %>%
+  mutate(EV_Affective_Well_Being_Negative = as.numeric(EV_Affective_Well_Being_Negative)) %>% 
+  count(EV_Affective_Well_Being_Negative)
+
+AFF_WB_N_no <- data_only_no_activity %>%
+  filter(ID == id) %>%
+  select(EV_Affective_Well_Being_Negative)  %>%
+  rowwise() %>%
+  mutate(EV_Affective_Well_Being_Negative = as.numeric(EV_Affective_Well_Being_Negative)) %>% 
+  count(EV_Affective_Well_Being_Negative)
+
+RD_free <- data_only_free_activity %>%
+  filter(ID == id) %>%
+  select(EV_Resource_Depletion)  %>%
+  rowwise() %>%
+  mutate(EV_Resource_Depletion = as.numeric(EV_Resource_Depletion)) %>% 
+  count(EV_Resource_Depletion)
+
+RD_no <- data_only_no_activity %>%
+  filter(ID == id) %>%
+  select(EV_Resource_Depletion)  %>%
+  rowwise() %>%
+  mutate(EV_Resource_Depletion = as.numeric(EV_Resource_Depletion)) %>% 
+  count(EV_Resource_Depletion)
+
+AA_free <- data_only_free_activity %>%
+  filter(ID == id) %>%
+  select(EV_Anger_Anxiety)  %>%
+  rowwise() %>%
+  mutate(EV_Anger_Anxiety = as.numeric(EV_Anger_Anxiety)) %>% 
+  count(EV_Anger_Anxiety)
+
+AA_no <- data_only_no_activity %>%
+  filter(ID == id) %>%
+  select(EV_Anger_Anxiety)  %>%
+  rowwise() %>%
+  mutate(EV_Anger_Anxiety = as.numeric(EV_Anger_Anxiety)) %>% 
+  count(EV_Anger_Anxiety)
+
+SP_free <- data_only_free_activity %>%
+  filter(ID == id) %>%
+  select(EV_SP_Experiences)  %>%
+  rowwise() %>%
+  mutate(EV_SP_Experiences = as.numeric(EV_SP_Experiences)) %>% 
+  count(EV_SP_Experiences)
+
+SP_no <- data_only_no_activity %>%
+  filter(ID == id) %>%
+  select(EV_SP_Experiences)  %>%
+  rowwise() %>%
+  mutate(EV_SP_Experiences = as.numeric(EV_SP_Experiences)) %>% 
+  count(EV_SP_Experiences)
+
+SM_free <- data_only_free_activity %>%
+  filter(ID == id) %>%
+  select(EV_SM_Experiences)  %>%
+  rowwise() %>%
+  mutate(EV_SM_Experiences = as.numeric(EV_SM_Experiences)) %>% 
+  count(EV_SM_Experiences)
+
+SM_no <- data_only_no_activity %>%
+  filter(ID == id) %>%
+  select(EV_SM_Experiences)  %>%
+  rowwise() %>%
+  mutate(EV_SM_Experiences = as.numeric(EV_SM_Experiences)) %>% 
+  count(EV_SM_Experiences)
+
+# Step 1: Add an 'Activity' column to each data frame
+COG_WB_free$Activity <- "Yes"
+COG_WB_no$Activity <- "No"
+AFF_WB_P_free$Activity <- "Yes"
+AFF_WB_P_no$Activity <- "No"
+AFF_WB_N_free$Activity <- "Yes"
+AFF_WB_N_no$Activity <- "No"
+RD_free$Activity <- "Yes"
+RD_no$Activity <- "No"
+AA_free$Activity <- "Yes"
+AA_no$Activity <- "No"
+SP_free$Activity <- "Yes"
+SP_no$Activity <- "No"
+SM_free$Activity <- "Yes"
+SM_no$Activity <- "No"
+
+# Step 2: Bind rows
+combined_data_WB <- bind_rows(COG_WB_free, COG_WB_no, AFF_WB_P_free, AFF_WB_P_no, AFF_WB_N_free, AFF_WB_N_no, RD_free, RD_no, AA_free, AA_no, SP_free, SP_no, SM_free, SM_no)
+
+old_daily <- c('EV_Cognitive_Well_Being', 'EV_Affective_Well_Being_Positive', 
+               'EV_Affective_Well_Being_Negative', 'EV_Resource_Depletion', 'EV_Anger_Anxiety', 'EV_SP_Experiences', 'EV_SM_Experiences')
+new <- c('C_WB_AVG', 'A_WB_P_AVG', 'A_WB_N_AVG', 'RD_AVG', 'AA_AVG', 'SP_EX_AVG', 'SM_EX_AVG')
+
+combined_data_WB <- combined_data_WB %>% rename_with(~ new, all_of(old_daily))
+
+# Step 3: Pivot longer
+combined_data_long <- combined_data_WB %>%
+  pivot_longer(cols = c(C_WB_AVG, A_WB_P_AVG, A_WB_N_AVG, RD_AVG, AA_AVG, SP_EX_AVG, SM_EX_AVG),
+               names_to = "variable",
+               values_to = "value")
+
+# Step 5: Filter out rows where value is NA
+combined_data_long <- combined_data_long %>%
+  filter(!is.na(value))
+
+combined_data_long$Activity <- factor(combined_data_long$Activity, levels = c("No", "Yes"))
+```
+
+**Plotting satisfaction over weaks**
+
+```{r}
+all_colors <- wes_palette("Darjeeling2")
+selected_colors <- all_colors[c(2,1)]
+
+my_plot <- ggplot(combined_data_long, aes(x = value)) +
+  geom_bar(aes(y = n, fill = Activity, alpha = Activity), stat = "identity", position = "identity", width = 0.5, alpha = 0.6) +
+  geom_density(aes(y = ..count.., color = Activity), adjust = 1) +
+  facet_wrap(~ variable, scales = "free_x", switch = "x", ncol = 3) +
+  labs(x = "Value", y = "Count") +
+  theme_minimal() +
+  theme(strip.placement = "outside",
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(size = 8),
+        axis.title.y = element_text(size = 9, face = "bold"),
+        axis.text.y = element_text(size = 8),
+        legend.title = element_text(size = 8, face = "bold"),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.3,"cm"),
+        legend.position = "top",
+        legend.justification='left',
+        legend.box = "horizontal",
+        panel.background = element_rect(fill = "grey95", color = NA),
+        panel.grid.major = element_line(color = "white"),
+        panel.grid.minor = element_line(color = "white")) +
+  scale_fill_manual(values = selected_colors, guide = guide_legend(byrow = TRUE, title.position = "top", title.hjust = 0)) +
+  scale_color_manual(values = selected_colors) +
+  scale_alpha_manual(values = c(0.6, 1))
+
+#ggsave("/Users/max/Desktop/my_plot.pdf", my_plot, width = 10, height = 8)
+print(my_plot)
+```
+
+------------------------------------------------------------------------
+
+### Regression Analysis of smartphone and social media usage
+
+**Load data**
+
+```{r}
+# Hier deinen Pfad zur Excel-Datei einfügen
+excel_path = "/Users/max/Desktop/IWB data all 2024.xlsx"
+data = read_excel(excel_path, sheet = "Data_scale_values", na = c("", " "))
+```
+
+**Data cleaning**
+
+```{r}
+# convert ID to factor
+data$ID = as.factor(data$ID)
+
+data$STARTED = as.POSIXct(data$STARTED) # POSIXct: contains date and time info
+
+data$DATE = as.Date(data$DATE)
+```
+
+**Get relevant column data**
+
+```{r}
+# Hier deine ID einfügen
+id = "b6qf9a7z"
+
+# Define start and end dates
+start_date <- as.Date("2024-06-24")
+end_date <- as.Date("2024-07-07")
+
+# Create logical vector indicating whether entry is within activity interval, 0 = no, 1 = yes
+data$between <- ifelse(data$DATE >= start_date & data$DATE <= end_date, 1, 0)
+
+data_only_free_activity <- data %>%
+  filter(between == 1) %>%
+  filter(QUESTNNR == "Daily_Evening_Survey") %>% 
+  filter(EV_Activity_Check == 2)
+
+SM_EX_own <- data_only_free_activity %>% 
+  filter(ID == id) %>% 
+  select(EV_SM_Experiences, DATE) %>% 
+  mutate(EV_SM_Experiences = as.numeric(EV_SM_Experiences))
+
+SM_EX_own$Group <- "Own"
+
+SM_EX_avg <- data_only_free_activity %>% 
+  filter(ID != id) %>% 
+  select(EV_SM_Experiences, DATE) %>%
+  group_by(DATE) %>% 
+  mutate(EV_SM_Experiences = as.numeric(EV_SM_Experiences)) %>%
+  summarise(EV_SM_Experiences = mean(EV_SM_Experiences, na.rm = TRUE)) %>%
+  ungroup()
+
+SM_EX_avg$Group <- "Other"
+
+SP_EX_own <- data_only_free_activity %>% 
+  filter(ID == id) %>% 
+  select(EV_SP_Experiences, DATE) %>% 
+  mutate(EV_SP_Experiences = as.numeric(EV_SP_Experiences))
+
+SP_EX_own$Group <- "Own"
+
+SP_EX_avg <- data_only_free_activity %>% 
+  filter(ID != id) %>% 
+  select(EV_SP_Experiences, DATE) %>%
+  group_by(DATE) %>% 
+  mutate(EV_SP_Experiences = as.numeric(EV_SP_Experiences)) %>%
+  summarise(EV_SP_Experiences = mean(EV_SP_Experiences, na.rm = TRUE)) %>%
+  ungroup()
+
+SP_EX_avg$Group <- "Other"
+
+SM_EX_comparison <- rbind(SM_EX_own, SM_EX_avg)
+
+SP_EX_comparison <- rbind(SP_EX_own, SP_EX_avg)
+```
+
+**Plotting regression analysis of smartphone and social media usage**
+
+```{r}
+all_colors <- wes_palette("Darjeeling2")
+selected_colors <- all_colors[c(1,2)]
+
+spreed_colors <- wes_palette("Darjeeling2")[c(1)]
+
+custom_theme <- theme_minimal() +
+  theme(panel.background = element_rect(fill = "grey95", color = NA),
+        panel.grid.major = element_line(color = "white"),
+        panel.grid.minor = element_line(color = "white"),
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(size = 9, face = "bold"),
+        legend.key.size = unit(0.3,"cm"),
+        legend.position = "top",
+        legend.justification='left',
+        legend.box = "horizontal",
+        legend.title = element_text(size = 8, face = "bold"),
+        legend.text = element_text(size = 7))
+
+guide <- guide_legend(byrow = TRUE, title.position = "top", title.hjust = 0)
+
+# Create the SM Experiences plot
+sm_plot <- ggplot(SM_EX_comparison, aes(x = DATE, y = EV_SM_Experiences, color = Group)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE, aes(fill = Group), formula = y ~ x) +
+  labs(y = "Time on Social Media",
+       color = "Data Source",
+       fill = "Data Source") +
+  scale_color_manual(values = selected_colors) +
+  scale_fill_manual(values = c("Own" = "lightblue", "Other" = spreed_colors, guide = guide)) +
+  custom_theme +
+  guides(color = guide, fill = guide)
+
+# Create the SP Experiences plot
+sp_plot <- ggplot(SP_EX_comparison, aes(x = DATE, y = EV_SP_Experiences, color = Group)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE, aes(fill = Group), formula = y ~ x) +
+  labs(y = "Time on Smartphone",
+       color = "Data Source",
+       fill = "Data Source") +
+  scale_color_manual(values = selected_colors) +
+  scale_fill_manual(values = c("Own" = "lightblue", "Other" = spreed_colors, guide = guide)) +
+  custom_theme +
+  guides(color = guide, fill = guide)
+
+# Combine the plots into a 1x2 matrix
+combined_plot <- sm_plot + sp_plot +
+  plot_layout(ncol = 2, guides = "collect") +
+  plot_annotation(title = "Comparison of Social Media and Social Presence Experiences",
+                  theme = theme(plot.title = element_blank(),
+                                legend.key.size = unit(0.3,"cm"),
+                                legend.position = "top",
+                                legend.justification='left',
+                                legend.box = "horizontal")) 
+
+# Display the combined plot
+print(combined_plot)
+```
+
+------------------------------------------------------------------------
+
+### Regression Analysis of resource deletion and social media usage
+
+**Load data**
+
+```{r}
+# Hier deinen Pfad zur Excel-Datei einfügen
+excel_path = "/Users/max/Desktop/IWB data all 2024.xlsx"
+data = read_excel(excel_path, sheet = "Data_scale_values", na = c("", " "))
+```
+
+**Data cleaning**
+
+```{r}
+# convert ID to factor
+data$ID = as.factor(data$ID)
+
+data$STARTED = as.POSIXct(data$STARTED) # POSIXct: contains date and time info
+
+data$DATE = as.Date(data$DATE)
+```
+
+**Get relevant column data**
+
+```{r}
+# Hier deine ID einfügen
+id = "b6qf9a7z"
+
+# Define start and end dates
+start_date <- as.Date("2024-06-24")
+end_date <- as.Date("2024-07-07")
+
+# Create logical vector indicating whether entry is within activity interval, 0 = no, 1 = yes
+data$between <- ifelse(data$DATE >= start_date & data$DATE <= end_date, 1, 0)
+
+data_only_free_activity <- data %>%
+  filter(between == 1) %>%
+  filter(QUESTNNR == "Daily_Evening_Survey") %>% 
+  filter(EV_Activity_Check == 2)
+
+
+PITU_EX_own <- data_only_free_activity %>% 
+  filter(QUESTNNR == "Daily_Evening_Survey") %>% 
+  filter(ID == id) %>% 
+  select(EV_PITU_Experiences, DATE) %>% 
+  mutate(EV_PITU_Experiences = as.numeric(EV_PITU_Experiences))
+
+PITU_EX_own $Group <- "Own"
+
+PITU_EX_other_avg <- data_only_free_activity %>% 
+  filter(ID != id) %>% 
+  select(EV_PITU_Experiences, DATE) %>%
+  group_by(DATE) %>% 
+  mutate(EV_PITU_Experiences = as.numeric(EV_PITU_Experiences)) %>%
+  summarise(EV_PITU_Experiences = mean(EV_PITU_Experiences, na.rm = TRUE)) %>%
+  ungroup()
+
+PITU_EX_other_avg $Group <- "Other"
+
+RD_own <- data_only_free_activity %>% 
+  filter(ID == id) %>% 
+  select(EV_Resource_Depletion, DATE) %>% 
+  mutate(EV_Resource_Depletion = as.numeric(EV_Resource_Depletion))
+
+RD_own$Group <- "Own"
+
+RD_other_avg <- data_only_free_activity %>% 
+  filter(ID != id) %>% 
+  select(EV_Resource_Depletion, DATE) %>%
+  group_by(DATE) %>% 
+  mutate(EV_Resource_Depletion = as.numeric(EV_Resource_Depletion)) %>%
+  summarise(EV_Resource_Depletion = mean(EV_Resource_Depletion, na.rm = TRUE)) %>%
+  ungroup()
+
+RD_other_avg$Group <- "Other"
+
+
+PITU_EX_comparison <- rbind(PITU_EX_own, PITU_EX_other_avg )
+
+RD_comparison <- rbind(RD_own, RD_other_avg)
+```
+
+**Plotting regression analysis of resource deletion and social media usage**
+
+```{r}
+all_colors <- wes_palette("Darjeeling2")
+selected_colors <- all_colors[c(1,2)]
+
+spreed_colors <- wes_palette("Darjeeling2")[c(1)]
+
+custom_theme <- theme_minimal() +
+  theme(panel.background = element_rect(fill = "grey95", color = NA),
+        panel.grid.major = element_line(color = "white"),
+        panel.grid.minor = element_line(color = "white"),
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(size = 9, face = "bold"),
+        legend.key.size = unit(0.3,"cm"),
+        legend.position = "top",
+        legend.justification='left',
+        legend.box = "horizontal",
+        legend.title = element_text(size = 8, face = "bold"),
+        legend.text = element_text(size = 7))
+
+guide <- guide_legend(byrow = TRUE, title.position = "top", title.hjust = 0)
+
+# Create the SM Experiences plot
+pitu_plot <- ggplot(PITU_EX_comparison, aes(x = DATE, y = EV_PITU_Experiences, color = Group)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE, aes(fill = Group), formula = y ~ x) +
+  labs(y = "Time on IT",
+       color = "Data Source",
+       fill = "Data Source") +
+  scale_color_manual(values = selected_colors) +
+  scale_fill_manual(values = c("Own" = "lightblue", "Other" = spreed_colors, guide = guide)) +
+  custom_theme +
+  guides(color = guide, fill = guide)
+
+# Create the SP Experiences plot
+rd_plot <- ggplot(RD_comparison, aes(x = DATE, y = EV_Resource_Depletion, color = Group)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE, aes(fill = Group), formula = y ~ x) +
+  labs(y = "Degree of Resource Depletion",
+       color = "Data Source",
+       fill = "Data Source") +
+  scale_color_manual(values = selected_colors) +
+  scale_fill_manual(values = c("Own" = "lightblue", "Other" = spreed_colors, guide = guide)) +
+  custom_theme +
+  guides(color = guide, fill = guide)
+
+# Combine the plots into a 1x2 matrix
+combined_plot <- pitu_plot + rd_plot +
+  plot_layout(ncol = 2, guides = "collect") +
+  plot_annotation(title = "Comparison of Social Media and Social Presence Experiences",
+                  theme = theme(plot.title = element_blank(),
+                                legend.key.size = unit(0.3,"cm"),
+                                legend.position = "top",
+                                legend.justification='left',
+                                legend.box = "horizontal")) 
+
+# Display the combined plot
+print(combined_plot)
+```
+
+------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+## Analyse objective data
+
+### Plot active time per week
+
+**Load data**
+
+```{r}
+# Hier deinen Pfad zur Excel-Datei einfügen
+excel_path = "/Users/max/Desktop/IWB data all 2024.xlsx"
+data = read_excel(excel_path, sheet = "Data_active_time", na = c("", " "))
+```
+
+**Data cleaning**
+
+```{r}
+data$DATE = as.Date(data$DATE)
+```
+
+**Get relevant data**
+
+```{r}
+# Define start and end dates
+start_date <- as.Date("2024-06-24")
+end_date <- as.Date("2024-07-07")
+
+# Create logical vector indicating whether entry is within activity interval, 0 = no, 1 = yes
+data$between <- ifelse(data$DATE >= start_date & data$DATE <= end_date, 1, 0)
+
+data_activity <- data %>%
+  filter(!is.na(WEEK)) %>%
+  filter(between == 1) %>%
+  select(DATE, WEEK, EV_Active_Time) %>%
+  group_by(WEEK) %>%
+  summarize(Total_Active_Time = sum(EV_Active_Time, na.rm = TRUE))
+
+data_activity_date <- data %>%
+  filter(between == 1) %>% 
+  filter(!is.na(DATE), !is.na(EV_Active_Time)) %>%
+  select(DATE, EV_Active_Time)
+```
+
+**Plotting active time per week**
+
+```{r}
+selected_colors <- brewer.pal(9, "Blues")[c(4, 5, 6)]
+line_color <- wes_palette("Darjeeling2")[c(2)]
+dotted_line_color <- wes_palette("Darjeeling2")[c(3)]
+
+active_time_plot <- ggplot(data_activity, aes(x = WEEK, y = Total_Active_Time)) +
+  geom_bar(stat = "identity", fill = selected_colors) +
+  labs(title = "Total Active Time per Week", x = "Week", y = "Minutes") +
+  custom_theme +
+  theme(title = element_text(size = 10, face = "bold"))
+
+active_time_over_days_plot <- ggplot(data_activity_date, aes(x = DATE, y = EV_Active_Time)) +
+  geom_line(aes(color = "Active Time"), size = 0.8) +
+  geom_point(aes(color = "Active Time"), size = 1.1) +
+  geom_hline(aes(yintercept = 30, linetype = "Daily Goal"), color = dotted_line_color, size = 0.8) + 
+  scale_color_manual(name = "Legend", values = c("Active Time" = line_color)) +
+  scale_linetype_manual(name = "Legend", values = c("Daily Goal" = "dashed")) +
+  labs(title = "Active Time per Day", x = "Day", y = "Minutes") +
+  custom_theme +
+  theme(title = element_text(size = 10, face = "bold"),
+        legend.title = element_blank(),
+        legend.position = "top",
+        legend.justification = 'left',
+        legend.box = "horizontal",
+        legend.key.size = unit(0.3,"cm"),
+        legend.text = element_text(size = 8)) +
+  scale_y_continuous(breaks = function(x) c(unique(floor(pretty(x))), 30)) +
+  scale_x_date(date_labels = "%b %d", date_breaks = "2 day", limits = c(start_date, end_date))
+
+combined_plot <- active_time_plot + active_time_over_days_plot +
+  plot_layout(ncol = 1, heights = c(1, 1)) +
+  plot_annotation(theme = theme(plot.title = element_blank()))
+
+print(combined_plot)
+```
