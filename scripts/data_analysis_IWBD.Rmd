@@ -173,7 +173,7 @@ plot_data <- combined_results %>%
 all_colors <- wes_palette("Darjeeling2")
 selected_colors <- all_colors[c(2,1)]
 
-ggplot(plot_data, aes(x = Measure, y = Score, fill = Group)) +
+differences_plot <- ggplot(plot_data, aes(x = Measure, y = Score, fill = Group)) +
   geom_bar(stat = "identity", position = "dodge", width = 0.8) +
   geom_text(aes(label = round(Score, 2)), 
             position = position_dodge(width = 0.9), 
@@ -201,101 +201,13 @@ ggplot(plot_data, aes(x = Measure, y = Score, fill = Group)) +
     panel.grid.minor = element_line(color = "white")) +
   scale_fill_manual(values = selected_colors, guide = guide_legend(byrow = TRUE, title.position = "top", title.hjust = 0)) +
   ylim(min(plot_data$Score) * 1.2, max(plot_data$Score) * 1.2)
+
+print(differences_plot)
 ```
 
 ------------------------------------------------------------------------
 
-### Analyzing Satisfaction Over Time
-
-**Load data**
-
-```{r}
-# Hier deinen Pfad zur Excel-Datei einfügen
-excel_path = ""
-data = read_excel(excel_path, sheet = "Data_scale_values", na = c("", " "))
-```
-
-**Data cleaning**
-
-```{r}
-# convert ID to factor
-data$ID = as.factor(data$ID)
-
-data$STARTED = as.POSIXct(data$STARTED) # POSIXct: contains date and time info
-
-data$DATE = as.Date(data$DATE)
-```
-
-**Get relevant column data**
-
-```{r}
-# Hier deine ID einfügen
-id = ""
-
-# Define start and end dates
-start_date <- as.Date("2024-06-03")
-end_date <- as.Date("2024-06-16")
-
-data$between <- ifelse(data$DATE >= start_date & data$DATE <= end_date, 1, 0)
-
-data_only_free_activity <- data %>%
-  filter(between == 1) %>%
-  filter(QUESTNNR == "Daily_Evening_Survey")
-
-PITU_SAT <- data_only_free_activity %>%
-  filter(ID == id) %>%
-  select(DATE, EV_PITU_Satisfaction)  %>%
-  mutate(EV_PITU_Satisfaction = as.numeric(EV_PITU_Satisfaction))
-
-SP_SAT <- data_only_free_activity %>%
-  filter(ID == id) %>%
-  select(EV_SP_Satisfaction)  %>%
-  mutate(EV_SP_Satisfaction = as.numeric(EV_SP_Satisfaction))
-
-SM_SAT <- data_only_free_activity %>%
-  filter(ID == id) %>%
-  select(EV_SM_Satisfaction)  %>%
-  mutate(EV_SM_Satisfaction = as.numeric(EV_SM_Satisfaction))
-
-combined_data <- cbind(PITU_SAT, SP_SAT, SM_SAT)
-
-combined_data_long <- combined_data %>%
-  pivot_longer(cols = c(EV_PITU_Satisfaction, EV_SP_Satisfaction, EV_SM_Satisfaction),
-               names_to = "Satisfaction_Type",
-               values_to = "Satisfaction_Score")
-```
-
-**Plotting satisfaction over weak**
-
-```{r}
-my_colors <- brewer.pal(3, "Dark2")
-ggplot(combined_data_long, aes(x = DATE, y = Satisfaction_Score, color = Satisfaction_Type)) +
-  geom_point() +
-  geom_line() +
-  theme_minimal() +
-  theme(axis.title.x = element_text(size = 9, face = "bold"),
-        axis.text.x = element_text(size = 8),
-        axis.title.y = element_text(size = 9, face = "bold"),
-        axis.text.y = element_text(size = 8),
-        legend.title = element_text(size = 8, face = "bold"),
-        legend.text = element_text(size = 7),
-        legend.key.size = unit(0.3,"cm"),
-        legend.position.inside = c(0.99, 0.2),
-        legend.position = "inside",
-        legend.justification='right',
-        legend.box.background = element_rect(color = "grey95", fill = "grey95", size = 0.1),
-    legend.background = element_rect(fill = "transparent", linewidth = 0.)) +
-  labs(x = "Day",
-       y = "Satisfaction Score",
-       color = "Satisfaction Type") +
-  scale_color_manual(values = my_colors,
-                    guide = guide_legend(nrow = 3, ncol = 1, byrow = TRUE, title.position = "top", title.hjust = 0)) +
-  scale_x_date(date_breaks = "2 day", date_labels = "%d.%m")
-```
-
-------------------------------------------------------------------------
-
-### Create correlation matrix
+### Create correlation matrix for „C_WB_AVG“, „A_WB_P_AVG“, „A_WB_N_AVG“, „RD_AVG“, „PITU_EX“, „SP_EX“, and „SM_EX“
 
 **Load data**
 
@@ -389,7 +301,7 @@ correlation_matrix_sat <- cor(combined_data_EX, use = "pairwise.complete.obs")
 **Plotting correlation matrix**
 
 ```{r}
-ggcorrplot(correlation_matrix_EX, 
+correlation_matrix_plot <- ggcorrplot(correlation_matrix_EX, 
            method ="square", 
            hc.order = TRUE,
            lab = TRUE,
@@ -397,6 +309,8 @@ ggcorrplot(correlation_matrix_EX,
            ggtheme = ggplot2::theme_gray,
            colors = c("#ECCBAE", "white", "#046C9A"))
 
+
+print(correlation_matrix_plot)
 ```
 
 ------------------------------------------------------------------------
@@ -588,7 +502,7 @@ combined_data_long$Activity <- factor(combined_data_long$Activity, levels = c("N
 all_colors <- wes_palette("Darjeeling2")
 selected_colors <- all_colors[c(2,1)]
 
-my_plot <- ggplot(combined_data_long, aes(x = value)) +
+activity_yes_no_plot <- ggplot(combined_data_long, aes(x = value)) +
   geom_bar(aes(y = n, fill = Activity, alpha = Activity), stat = "identity", position = "identity", width = 0.5, alpha = 0.6) +
   geom_density(aes(y = ..count.., color = Activity), adjust = 1) +
   facet_wrap(~ variable, scales = "free_x", switch = "x", ncol = 3) +
@@ -612,8 +526,8 @@ my_plot <- ggplot(combined_data_long, aes(x = value)) +
   scale_color_manual(values = selected_colors) +
   scale_alpha_manual(values = c(0.6, 1))
 
-#ggsave("/Users/max/Desktop/my_plot.pdf", my_plot, width = 10, height = 8)
-print(my_plot)
+
+print(activity_yes_no_plot)
 ```
 
 ------------------------------------------------------------------------
@@ -753,7 +667,6 @@ combined_plot <- sm_plot + sp_plot +
                                 legend.justification='left',
                                 legend.box = "horizontal")) 
 
-# Display the combined plot
 print(combined_plot)
 ```
 
@@ -863,7 +776,7 @@ custom_theme <- theme_minimal() +
 
 guide <- guide_legend(byrow = TRUE, title.position = "top", title.hjust = 0)
 
-# Create the SM Experiences plot
+# Create the PITU plot
 pitu_plot <- ggplot(PITU_EX_comparison, aes(x = DATE, y = EV_PITU_Experiences, color = Group)) +
   geom_point(alpha = 0.6) +
   geom_smooth(method = "lm", se = TRUE, aes(fill = Group), formula = y ~ x) +
@@ -875,7 +788,7 @@ pitu_plot <- ggplot(PITU_EX_comparison, aes(x = DATE, y = EV_PITU_Experiences, c
   custom_theme +
   guides(color = guide, fill = guide)
 
-# Create the SP Experiences plot
+# Create the RD plot
 rd_plot <- ggplot(RD_comparison, aes(x = DATE, y = EV_Resource_Depletion, color = Group)) +
   geom_point(alpha = 0.6) +
   geom_smooth(method = "lm", se = TRUE, aes(fill = Group), formula = y ~ x) +
@@ -890,7 +803,7 @@ rd_plot <- ggplot(RD_comparison, aes(x = DATE, y = EV_Resource_Depletion, color 
 # Combine the plots into a 1x2 matrix
 combined_plot <- pitu_plot + rd_plot +
   plot_layout(ncol = 2, guides = "collect") +
-  plot_annotation(title = "Comparison of Social Media and Social Presence Experiences",
+  plot_annotation(title = "",
                   theme = theme(plot.title = element_blank(),
                                 legend.key.size = unit(0.3,"cm"),
                                 legend.position = "top",
@@ -952,6 +865,19 @@ data_activity_date <- data %>%
 selected_colors <- brewer.pal(9, "Blues")[c(4, 5, 6)]
 line_color <- wes_palette("Darjeeling2")[c(2)]
 dotted_line_color <- wes_palette("Darjeeling2")[c(3)]
+
+custom_theme <- theme_minimal() +
+  theme(panel.background = element_rect(fill = "grey95", color = NA),
+        panel.grid.major = element_line(color = "white"),
+        panel.grid.minor = element_line(color = "white"),
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(size = 9, face = "bold"),
+        legend.key.size = unit(0.3,"cm"),
+        legend.position = "top",
+        legend.justification='left',
+        legend.box = "horizontal",
+        legend.title = element_text(size = 8, face = "bold"),
+        legend.text = element_text(size = 7))
 
 active_time_plot <- ggplot(data_activity, aes(x = WEEK, y = Total_Active_Time)) +
   geom_bar(stat = "identity", fill = selected_colors) +
