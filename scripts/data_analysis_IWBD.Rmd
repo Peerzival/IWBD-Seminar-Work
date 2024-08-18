@@ -38,7 +38,7 @@ library(patchwork)
 
 ```{r}
 # Hier deinen Pfad zur Excel-Datei einfügen
-excel_path = "/Users/max/Desktop/IWB data all 2024.xlsx"
+excel_path = ""
 data = read_excel(excel_path, sheet = "Data_scale_values", na = c("", " "))
 ```
 
