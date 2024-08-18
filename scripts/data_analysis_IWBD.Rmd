@@ -38,7 +38,7 @@ library(patchwork)
 
 ```{r}
 # Hier deinen Pfad zur Excel-Datei einfügen
-excel_path = ""
+excel_path = "/Users/max/Desktop/IWB data all 2024.xlsx"
 data = read_excel(excel_path, sheet = "Data_scale_values", na = c("", " "))
 ```
 
@@ -171,13 +171,13 @@ plot_data <- combined_results %>%
 
 ```{r}
 all_colors <- wes_palette("Darjeeling2")
-selected_colors <- all_colors[c(2,1)]
+selected_colors <- all_colors[c(4,1)]
 
 differences_plot <- ggplot(plot_data, aes(x = Measure, y = Score, fill = Group)) +
   geom_bar(stat = "identity", position = "dodge", width = 0.8) +
   geom_text(aes(label = round(Score, 2)), 
             position = position_dodge(width = 0.9), 
-            vjust = -0.5, color = "black", size = 3) +
+            vjust = -0.5, color = "black", size = 2.5) +
   labs(x = "Well Being Categories", 
        y = "Difference",
        fill = "Data Source") +
@@ -188,8 +188,8 @@ differences_plot <- ggplot(plot_data, aes(x = Measure, y = Score, fill = Group))
   theme_minimal() +
   theme(
     axis.text.x = element_text(size = 8, angle = 45, hjust = 1),
-    axis.title.x =  element_text(size = 9, face = "bold"),
-    axis.title.y = element_text(size = 9, face = "bold"),
+    axis.title.x =  element_text(size = 8, face = "bold"),
+    axis.title.y = element_text(size = 8, face = "bold"),
     legend.title = element_text(size = 8, face = "bold"),
     legend.key.size = unit(0.3,"cm"),
     legend.text = element_text(size = 7), 
@@ -203,6 +203,8 @@ differences_plot <- ggplot(plot_data, aes(x = Measure, y = Score, fill = Group))
   ylim(min(plot_data$Score) * 1.2, max(plot_data$Score) * 1.2)
 
 print(differences_plot)
+
+ggsave("well_being_differences_plot.pdf", differences_plot, width = 16, height = 9, units = "cm")
 ```
 
 ------------------------------------------------------------------------
@@ -499,19 +501,20 @@ combined_data_long$Activity <- factor(combined_data_long$Activity, levels = c("N
 **Plotting satisfaction over weaks**
 
 ```{r}
-all_colors <- wes_palette("Darjeeling2")
-selected_colors <- all_colors[c(2,1)]
+selected_colors <- wes_palette("Darjeeling2")[c(2,1)]
+line_colors <- wes_palette("Darjeeling2")[c(2,3)]
 
 activity_yes_no_plot <- ggplot(combined_data_long, aes(x = value)) +
-  geom_bar(aes(y = n, fill = Activity, alpha = Activity), stat = "identity", position = "identity", width = 0.5, alpha = 0.6) +
+  geom_bar(aes(y = n, fill = Activity, alpha = Activity), stat = "identity", position = "identity", width = 0.5) +
   geom_density(aes(y = ..count.., color = Activity), adjust = 1) +
   facet_wrap(~ variable, scales = "free_x", switch = "x", ncol = 3) +
   labs(x = "Value", y = "Count") +
   theme_minimal() +
   theme(strip.placement = "outside",
+        strip.text = element_text(face = "italic"),
         axis.title.x = element_blank(),
         axis.text.x = element_text(size = 8),
-        axis.title.y = element_text(size = 9, face = "bold"),
+        axis.title.y = element_text(size = 8, face = "bold"),
         axis.text.y = element_text(size = 8),
         legend.title = element_text(size = 8, face = "bold"),
         legend.text = element_text(size = 7),
@@ -523,11 +526,13 @@ activity_yes_no_plot <- ggplot(combined_data_long, aes(x = value)) +
         panel.grid.major = element_line(color = "white"),
         panel.grid.minor = element_line(color = "white")) +
   scale_fill_manual(values = selected_colors, guide = guide_legend(byrow = TRUE, title.position = "top", title.hjust = 0)) +
-  scale_color_manual(values = selected_colors) +
-  scale_alpha_manual(values = c(0.6, 1))
+  scale_color_manual(values = line_colors) +
+  scale_alpha_manual(values = c("No" = 0.5, "Yes" = 1))
 
 
 print(activity_yes_no_plot)
+
+ggsave("KDE_activity_yes_no_plot.pdf", activity_yes_no_plot, width = 16, height = 11, units = "cm")
 ```
 
 ------------------------------------------------------------------------
@@ -599,8 +604,7 @@ SP_EX_avg <- data_only_free_activity %>%
   filter(ID != id) %>% 
   select(EV_SP_Experiences, DATE) %>%
   group_by(DATE) %>% 
-  mutate(EV_SP_Experiences = as.numeric(EV_SP_Experiences)) %>%
-  summarise(EV_SP_Experiences = mean(EV_SP_Experiences, na.rm = TRUE)) %>%
+  mutate(EV_SP_Experiences = as.numeric(EV_SP_Experiences)) %>% summarise(EV_SP_Experiences = mean(EV_SP_Experiences, na.rm = TRUE)) %>%
   ungroup()
 
 SP_EX_avg$Group <- "Other"
@@ -623,7 +627,7 @@ custom_theme <- theme_minimal() +
         panel.grid.major = element_line(color = "white"),
         panel.grid.minor = element_line(color = "white"),
         axis.title.x = element_blank(),
-        axis.title.y = element_text(size = 9, face = "bold"),
+        axis.title.y = element_text(size = 8, face = "bold"),
         legend.key.size = unit(0.3,"cm"),
         legend.position = "top",
         legend.justification='left',
@@ -668,6 +672,8 @@ combined_plot <- sm_plot + sp_plot +
                                 legend.box = "horizontal")) 
 
 print(combined_plot)
+
+ggsave("regression_pitu_rd_plot.pdf", combined_plot, width = 16, height = 8, units = "cm")
 ```
 
 ------------------------------------------------------------------------
@@ -766,7 +772,7 @@ custom_theme <- theme_minimal() +
         panel.grid.major = element_line(color = "white"),
         panel.grid.minor = element_line(color = "white"),
         axis.title.x = element_blank(),
-        axis.title.y = element_text(size = 9, face = "bold"),
+        axis.title.y = element_text(size = 8, face = "bold"),
         legend.key.size = unit(0.3,"cm"),
         legend.position = "top",
         legend.justification='left',
@@ -810,8 +816,9 @@ combined_plot <- pitu_plot + rd_plot +
                                 legend.justification='left',
                                 legend.box = "horizontal")) 
 
-# Display the combined plot
 print(combined_plot)
+
+ggsave("regression_sp_sm_plot.pdf", combined_plot, width = 16, height = 8, units = "cm")
 ```
 
 ------------------------------------------------------------------------
@@ -871,7 +878,7 @@ custom_theme <- theme_minimal() +
         panel.grid.major = element_line(color = "white"),
         panel.grid.minor = element_line(color = "white"),
         axis.title.x = element_blank(),
-        axis.title.y = element_text(size = 9, face = "bold"),
+        axis.title.y = element_text(size = 8, face = "bold"),
         legend.key.size = unit(0.3,"cm"),
         legend.position = "top",
         legend.justification='left',
@@ -883,7 +890,7 @@ active_time_plot <- ggplot(data_activity, aes(x = WEEK, y = Total_Active_Time)) 
   geom_bar(stat = "identity", fill = selected_colors) +
   labs(title = "Total Active Time per Week", x = "Week", y = "Minutes") +
   custom_theme +
-  theme(title = element_text(size = 10, face = "bold"))
+  theme(title = element_text(size = 9, face = "bold"))
 
 active_time_over_days_plot <- ggplot(data_activity_date, aes(x = DATE, y = EV_Active_Time)) +
   geom_line(aes(color = "Active Time"), size = 0.8) +
@@ -893,7 +900,7 @@ active_time_over_days_plot <- ggplot(data_activity_date, aes(x = DATE, y = EV_Ac
   scale_linetype_manual(name = "Legend", values = c("Daily Goal" = "dashed")) +
   labs(title = "Active Time per Day", x = "Day", y = "Minutes") +
   custom_theme +
-  theme(title = element_text(size = 10, face = "bold"),
+  theme(title = element_text(size = 9, face = "bold"),
         legend.title = element_blank(),
         legend.position = "top",
         legend.justification = 'left',
@@ -908,4 +915,6 @@ combined_plot <- active_time_plot + active_time_over_days_plot +
   plot_annotation(theme = theme(plot.title = element_blank()))
 
 print(combined_plot)
+
+ggsave("movement_time_per_week_plot.pdf", combined_plot, width = 16, height = 11, units = "cm")
 ```

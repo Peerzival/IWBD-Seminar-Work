@@ -28,6 +28,656 @@ library(broom) # For extracting coefficients from models
 library(car)
 library(scales)
 library(patchwork)
+library(cowplot)
 ```
 
-## ddd
+## Compare relational attachment and trusting beliefs competence
+
+**Load data**
+
+```{r}
+# Hier deinen Pfad zur Excel-Datei einfügen
+excel_path = "/Users/max/Desktop/IWB data all 2024.xlsx"
+data = read_excel(excel_path, sheet = "Data_scale_values", na = c("", " "))
+```
+
+**Data cleaning**
+
+```{r}
+# convert ID to factor
+data$ID = as.factor(data$ID)
+
+data$STARTED = as.POSIXct(data$STARTED) # POSIXct: contains date and time info
+
+data$DATE = as.Date(data$DATE)
+```
+
+**Get relevant column data**
+
+```{r}
+# Hier deine ID einfügen
+id = "b6qf9a7z"
+
+# Define start and end dates
+start_date <- as.Date("2024-06-03")
+end_date <- as.Date("2024-06-17")
+
+# Create logical vector indicating whether entry is within activity interval, 0 = no, 1 = yes
+data$between <- ifelse(data$DATE >= start_date & data$DATE <= end_date, 1, 0)
+
+data_me <- data %>%
+  filter(between == 1,
+         QUESTNNR == "ChatGPT_Survey",
+         ID == id)
+
+data_others <- data %>%
+  filter(between == 1,
+         QUESTNNR == "ChatGPT_Survey",
+         ID != id)
+
+Trusting_Beliefs_Integrity_me <- data_me %>%
+  select(AM_Trusting_Beliefs_Integrity) %>%
+  mutate(AM_Trusting_Beliefs_Integrity = as.numeric(AM_Trusting_Beliefs_Integrity)) %>% 
+   count(AM_Trusting_Beliefs_Integrity)
+
+Trusting_Beliefs_Integrity_other <- data_others %>%
+  select(AM_Trusting_Beliefs_Integrity) %>%
+  mutate(AM_Trusting_Beliefs_Integrity = as.numeric(AM_Trusting_Beliefs_Integrity)) %>% 
+   count(AM_Trusting_Beliefs_Integrity)
+
+Relational_Attachment_me <- data_me %>%
+  select(AM_Relational_Attachment) %>%
+  mutate(AM_Relational_Attachment = as.numeric(AM_Relational_Attachment)) %>% 
+  count(AM_Relational_Attachment)
+
+Relational_Attachment_other <- data_others %>%
+  select(AM_Relational_Attachment) %>%
+  mutate(AM_Relational_Attachment = as.numeric(AM_Relational_Attachment)) %>% 
+  count(AM_Relational_Attachment)
+
+Familiarity_me <- data_me %>%
+  select(AM_Familiarity) %>%
+  mutate(AM_Familiarity = as.numeric(AM_Familiarity)) %>% 
+  count(AM_Familiarity)
+
+Familiarity_other <- data_others %>%
+  select(AM_Familiarity) %>%
+  mutate(AM_Familiarity = as.numeric(AM_Familiarity)) %>% 
+  count(AM_Familiarity)
+
+Trusting_Beliefs_Integrity_me$Group <- "Me"
+Trusting_Beliefs_Integrity_other$Group <- "Others"
+Relational_Attachment_me$Group <- "Me"
+Relational_Attachment_other$Group <- "Others"
+Familiarity_me$Group <- "Me"
+Familiarity_other$Group <- "Others"
+
+combined_data <- bind_rows(Trusting_Beliefs_Integrity_me, Trusting_Beliefs_Integrity_other, Relational_Attachment_me, Relational_Attachment_other, Familiarity_me, Familiarity_other)
+
+old_daily <- c('AM_Trusting_Beliefs_Integrity', 'AM_Relational_Attachment', 'AM_Familiarity')
+new <- c('Trusting_Beliefs_Integrity', 'Relational_Attachment', 'Familiarity')
+
+combined_data <- combined_data %>% rename_with(~ new, all_of(old_daily))
+
+combined_data_long <- combined_data %>%
+  pivot_longer(cols = c(Trusting_Beliefs_Integrity, Relational_Attachment, Familiarity),
+               names_to = "variable",
+               values_to = "value")
+
+combined_data_long <- combined_data_long %>%
+  filter(!is.na(value))
+
+combined_data_long$Group <- factor(combined_data_long$Group, levels = c("Me", "Others"))
+```
+
+**Plot the data**
+
+```{r}
+selected_colors <- wes_palette("Darjeeling2")[c(2,1)]
+
+line_colors <- wes_palette("Darjeeling2")[c(2,3)]
+
+activity_yes_no_plot <- ggplot(combined_data_long, aes(x = value)) +
+  geom_bar(aes(y = n, fill = Group, alpha = Group), stat = "identity", position = "identity", width = 0.5) +
+  geom_density(aes(y = ..count.., color = Group), adjust = 1) +
+  facet_wrap(~ variable, scales = "free_x", switch = "x", ncol = 3) +
+  labs(x = "Value", y = "Count") +
+  theme_minimal() +
+  theme(strip.placement = "outside",
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(size = 8),
+        axis.title.y = element_text(size = 9, face = "bold"),
+        axis.text.y = element_text(size = 8),
+        legend.title = element_text(size = 8, face = "bold"),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.3,"cm"),
+        legend.position = "top",
+        legend.justification='left',
+        legend.box = "horizontal",
+        panel.background = element_rect(fill = "grey95", color = NA),
+        panel.grid.major = element_line(color = "white"),
+        panel.grid.minor = element_line(color = "white")) +
+  scale_fill_manual(values = selected_colors, guide = guide_legend(byrow = TRUE, title.position = "top", title.hjust = 0)) +
+  scale_color_manual(values = line_colors) +
+  scale_alpha_manual(values = c("Me" = 1, "Others" = 0.6)) +
+  scale_y_continuous(limits = c(0, 50), oob = scales::squish) +
+  scale_x_continuous(breaks = function(x) seq(ceiling(min(x)), floor(max(x)), by = 1),
+                   labels = function(x) as.integer(x))
+
+print(activity_yes_no_plot)
+
+ggsave("activity_yes_no_plot.pdf", activity_yes_no_plot, width = 16, height = 7, units = "cm")
+```
+
+## Regression analysis effect of ChatGPT on well-being over time
+
+**Load data**
+
+```{r}
+# Hier deinen Pfad zur Excel-Datei einfügen
+excel_path = "/Users/max/Desktop/IWB data all 2024.xlsx"
+data = read_excel(excel_path, sheet = "Data_scale_values", na = c("", " "))
+```
+
+**Data cleaning**
+
+```{r}
+# convert ID to factor
+data$ID = as.factor(data$ID)
+
+data$STARTED = as.POSIXct(data$STARTED) # POSIXct: contains date and time info
+
+data$DATE = as.Date(data$DATE)
+```
+
+**Get relevant column data**
+
+```{r}
+# Hier deine ID einfügen
+id = "b6qf9a7z"
+
+# Define start and end dates
+start_date <- as.Date("2024-06-03")
+end_date <- as.Date("2024-06-17")
+
+# Create logical vector indicating whether entry is within activity interval, 0 = no, 1 = yes
+data$between <- ifelse(data$DATE >= start_date & data$DATE <= end_date, 1, 0)
+
+data_me <- data %>%
+  filter(between == 1,
+         QUESTNNR == "ChatGPT_Survey",
+         ID == id)
+
+data_me$Group <- "Me"
+
+data_others <- data %>%
+  filter(between == 1,
+         QUESTNNR == "ChatGPT_Survey",
+         ID != id)
+
+data_others$Group <- "Others"
+
+CB_me <- data_me %>%
+  select(AM_Cognitive_Well_Being, DATE, Group) %>%
+  mutate(AM_Cognitive_Well_Being = as.numeric(AM_Cognitive_Well_Being))
+
+CB_other <- data_others %>%
+  select(AM_Cognitive_Well_Being, DATE, Group) %>%
+  group_by(DATE) %>% 
+  mutate(AM_Cognitive_Well_Being = as.numeric(AM_Cognitive_Well_Being)) %>% summarise(AM_Cognitive_Well_Being = mean(AM_Cognitive_Well_Being, na.rm = TRUE)) %>%
+  ungroup()
+
+CB_other$Group <- "Others"
+
+AWB_P_me <- data_me %>%
+  select(AM_Affective_Well_Being_Positive, DATE, Group) %>%
+  mutate(AM_Affective_Well_Being_Positive = as.numeric(AM_Affective_Well_Being_Positive))
+
+AWB_N_me <- data_me %>%
+  select(AM_Affective_Well_Being_Negative, DATE, Group) %>%
+  mutate(AM_Affective_Well_Being_Negative = as.numeric(AM_Affective_Well_Being_Negative))
+
+AWB_P_other <- data_others %>%
+  select(AM_Affective_Well_Being_Positive, DATE, Group) %>%
+  group_by(DATE) %>% 
+  mutate(AM_Affective_Well_Being_Positive = as.numeric(AM_Affective_Well_Being_Positive)) %>% summarise(AM_Affective_Well_Being_Positive = mean(AM_Affective_Well_Being_Positive, na.rm = TRUE)) %>%
+  ungroup()
+
+AWB_P_other$Group <- "Others"
+
+AWB_N_other <- data_others %>%
+  select(AM_Affective_Well_Being_Negative, DATE, Group) %>%
+   group_by(DATE) %>% 
+  mutate(AM_Affective_Well_Being_Negative = as.numeric(AM_Affective_Well_Being_Negative)) %>% summarise(AM_Affective_Well_Being_Negative = mean(AM_Affective_Well_Being_Negative, na.rm = TRUE)) %>%
+  ungroup()
+
+AWB_N_other$Group <- "Others"
+
+AA_me <- data_me %>%
+  select(AM_Anger_and_Anxiety, DATE, Group) %>%
+  mutate(AM_Anger_and_Anxiety = as.numeric(AM_Anger_and_Anxiety))
+
+AA_other <- data_others %>%
+  select(AM_Anger_and_Anxiety, DATE, Group) %>%
+  group_by(DATE) %>% 
+  mutate(AM_Anger_and_Anxiety = as.numeric(AM_Anger_and_Anxiety)) %>% summarise(AM_Anger_and_Anxiety = mean(AM_Anger_and_Anxiety, na.rm = TRUE)) %>%
+  ungroup()
+
+AA_other$Group <- "Others"
+
+CB_comparison <- bind_rows(CB_me, CB_other)
+AWB_P_comparison <- bind_rows(AWB_P_me, AWB_P_other)
+AWB_N_comparison <- bind_rows(AWB_N_me, AWB_N_other)
+AA_comparison <- bind_rows(AA_me, AA_other)
+```
+
+**Plot the data**
+
+```{r}
+all_colors <- wes_palette("Darjeeling2")
+selected_colors <- all_colors[c(2,1)]
+
+spreed_colors <- wes_palette("Darjeeling2")[c(1)]
+
+custom_theme <- theme_minimal() +
+  theme(panel.background = element_rect(fill = "grey95", color = NA),
+        panel.grid.major = element_line(color = "white"),
+        panel.grid.minor = element_line(color = "white"),
+        axis.title.x = element_text(size = 8, face = "italic"),
+       # axis.title.x = element_blank(),
+        axis.title.y = element_text(size = 8, face = "bold"),
+        legend.key.size = unit(0.3,"cm"),
+        legend.position = "top",
+        legend.justification='right',
+        legend.box = "horizontal",
+        legend.title = element_text(size = 8, face = "bold"),
+        legend.text = element_text(size = 7))
+
+guide <- guide_legend(byrow = TRUE, title.position = "top", title.hjust = 0)
+
+# Create the SP Experiences plot
+CB_plot <- ggplot(CB_comparison, aes(x = DATE, y = AM_Cognitive_Well_Being, color = Group)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE, aes(fill = Group), formula = y ~ x) +
+  labs(y = "Score",
+       x = "Cognitive Well Being",
+       color = "Data Source",
+       fill = "Data Source") +
+  scale_color_manual(values = selected_colors) +
+  scale_fill_manual(values = c("Me" = "lightblue", "Others" = spreed_colors, guide = guide)) +
+  custom_theme +
+  guides(color = guide, fill = guide)
+
+AWB_P_plot <- ggplot(AWB_P_comparison, aes(x = DATE, y = AM_Affective_Well_Being_Positive, color = Group)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE, aes(fill = Group), formula = y ~ x) +
+  labs(y = "Score",
+       x = "Affective Well Being Positive",
+       color = "Data Source",
+       fill = "Data Source") +
+  scale_color_manual(values = selected_colors) +
+  scale_fill_manual(values = c("Me" = "lightblue", "Others" = spreed_colors, guide = guide)) +
+  custom_theme +
+  guides(color = guide, fill = guide)
+
+AWB_N_plot <- ggplot(AWB_N_comparison, aes(x = DATE, y = AM_Affective_Well_Being_Negative, color = Group)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE, aes(fill = Group), formula = y ~ x) +
+  labs(y = "Score",
+       x = "Affective Well Being Negative",
+       color = "Data Source",
+       fill = "Data Source") +
+  scale_color_manual(values = selected_colors) +
+  scale_fill_manual(values = c("Me" = "lightblue", "Others" = spreed_colors, guide = guide)) +
+  custom_theme +
+  guides(color = guide, fill = guide)
+
+AA_plot <- ggplot(AA_comparison, aes(x = DATE, y = AM_Anger_and_Anxiety, color = Group)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE, aes(fill = Group), formula = y ~ x) +
+  labs(y = "Score",
+       x = "Anger and Anxiety",
+       color = "Data Source",
+       fill = "Data Source") +
+  scale_color_manual(values = selected_colors) +
+  scale_fill_manual(values = c("Me" = "lightblue", "Others" = spreed_colors, guide = guide)) +
+  custom_theme +
+  guides(color = guide, fill = guide)
+
+combined_plot <- CB_plot + AWB_P_plot + AWB_N_plot + AA_plot +
+  plot_layout(ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "Comparison of Social Media and Social Presence Experiences",
+    theme = theme(plot.title = element_blank(),
+                  legend.key.size = unit(0.3,"cm"),
+                  legend.justification='left',
+                  legend.position = "top",
+                  legend.box = "horizontal"))
+
+print(combined_plot)
+
+ggsave("regression_well_being_plot.pdf", combined_plot, width = 16, height = 9, units = "cm")
+```
+
+## Regression plot prompt type, RA, instrumental and emotionale support satisfaction over time
+
+**Load data**
+
+```{r}
+# Hier deinen Pfad zur Excel-Datei einfügen
+excel_path = "/Users/max/Desktop/IWB data all 2024.xlsx"
+data = read_excel(excel_path, sheet = "Data_scale_values", na = c("", " "))
+```
+
+**Data cleaning**
+
+```{r}
+# convert ID to factor
+data$ID = as.factor(data$ID)
+
+data$STARTED = as.POSIXct(data$STARTED) # POSIXct: contains date and time info
+
+data$DATE = as.Date(data$DATE)
+```
+
+**Get relevant column data**
+
+```{r}
+# Hier deine ID einfügen
+id = "b6qf9a7z"
+
+# Define start and end dates
+start_date <- as.Date("2024-06-03")
+end_date <- as.Date("2024-06-17")
+
+# Create logical vector indicating whether entry is within activity interval, 0 = no, 1 = yes
+data$between <- ifelse(data$DATE >= start_date & data$DATE <= end_date, 1, 0)
+
+data_me <- data %>%
+  filter(between == 1,
+         QUESTNNR == "ChatGPT_Survey",
+         ID == id)
+
+data_me$Group <- "Me"
+
+data_others <- data %>%
+  filter(between == 1,
+         QUESTNNR == "ChatGPT_Survey",
+         ID != id)
+
+data_others$Group <- "Others"
+
+Relational_Attachment_me <- data_me %>%
+  select(AM_Relational_Attachment, DATE, Group) %>%
+  mutate(AM_Relational_Attachment = as.numeric(AM_Relational_Attachment))
+
+Relational_Attachment_other <- data_others %>%
+  select(AM_Relational_Attachment, DATE, Group) %>%
+  group_by(DATE) %>% 
+  mutate(AM_Relational_Attachment = as.numeric(AM_Relational_Attachment)) %>% summarise(AM_Relational_Attachment = mean(AM_Relational_Attachment, na.rm = TRUE)) %>%
+  ungroup()
+
+Relational_Attachment_other$Group <- "Others"
+
+SIS_me <- data_me %>%
+  select(AM_Satisfaction_Instrumental_Support, DATE, Group) %>%
+  mutate(AM_Satisfaction_Instrumental_Support = as.numeric(AM_Satisfaction_Instrumental_Support))
+
+SIS_other <- data_others %>%
+  select(AM_Satisfaction_Instrumental_Support, DATE, Group) %>%
+  group_by(DATE) %>% 
+  mutate(AM_Satisfaction_Instrumental_Support = as.numeric(AM_Satisfaction_Instrumental_Support)) %>% summarise(AM_Satisfaction_Instrumental_Support = mean(AM_Satisfaction_Instrumental_Support, na.rm = TRUE)) %>%
+  ungroup()
+
+SIS_other$Group <- "Others"
+
+SES_me <- data_me %>%
+  select(AM_Satisfaction_Emotional_Support, DATE, Group) %>%
+  mutate(AM_Satisfaction_Emotional_Support = as.numeric(AM_Satisfaction_Emotional_Support))
+
+SES_other <- data_others %>%
+  select(AM_Satisfaction_Emotional_Support, DATE, Group) %>%
+  group_by(DATE) %>% 
+  mutate(AM_Satisfaction_Emotional_Support = as.numeric(AM_Satisfaction_Emotional_Support)) %>% summarise(AM_Satisfaction_Emotional_Support = mean(AM_Satisfaction_Emotional_Support, na.rm = TRUE)) %>%
+  ungroup()
+
+SES_other$Group <- "Others"
+
+IV_prompts_me <- data_me %>%
+  select(IV, DATE, Group) %>%
+  mutate(IV = as.numeric(IV))
+
+IV_prompts_other <- data_others %>%
+  select(IV, DATE, Group) %>%
+  group_by(DATE) %>%
+  mutate(IV = as.numeric(IV)) %>% summarise(IV = mean(IV, na.rm = TRUE)) %>%
+  ungroup()
+
+IV_prompts_other$Group <- "Others"
+
+RA_comparison <- bind_rows(Relational_Attachment_me, Relational_Attachment_other)
+SIS_comparison <- bind_rows(SIS_me, SIS_other)
+SES_comparison <- bind_rows(SES_me, SES_other)
+IV_prompts_comparison <- bind_rows(IV_prompts_me, IV_prompts_other)
+```
+
+**Plot the data**
+
+```{r}
+all_colors <- wes_palette("Darjeeling2")
+selected_colors <- all_colors[c(2,1)]
+
+spreed_colors <- wes_palette("Darjeeling2")[c(1)]
+
+custom_theme <- theme_minimal() +
+  theme(panel.background = element_rect(fill = "grey95", color = NA),
+        panel.grid.major = element_line(color = "white"),
+        panel.grid.minor = element_line(color = "white"),
+        axis.title.x = element_text(size = 8, face = "italic"),
+       # axis.title.x = element_blank(),
+        axis.title.y = element_text(size = 8, face = "bold"),
+        legend.key.size = unit(0.3,"cm"),
+        legend.position = "top",
+        legend.justification='right',
+        legend.box = "horizontal",
+        legend.title = element_text(size = 8, face = "bold"),
+        legend.text = element_text(size = 7))
+
+guide <- guide_legend(byrow = TRUE, title.position = "top", title.hjust = 0)
+
+# Create the SM Experiences plot
+RA_plot <- ggplot(RA_comparison, aes(x = DATE, y = AM_Relational_Attachment, color = Group)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE, aes(fill = Group), formula = y ~ x) +
+  labs(y = "Score",
+       x = "Relational Attachment",
+       color = "Data Source",
+       fill = "Data Source") +
+  scale_color_manual(values = selected_colors) +
+  scale_fill_manual(values = c("Me" = "lightblue", "Others" = spreed_colors, guide = guide)) +
+  custom_theme +
+  guides(color = guide, fill = guide)
+
+SIS_plot <- ggplot(SIS_comparison, aes(x = DATE, y = AM_Satisfaction_Instrumental_Support, color = Group)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE, aes(fill = Group), formula = y ~ x) +
+  labs(y = "Score",
+       x = "Satisfaction Instrumental Support",
+       color = "Data Source",
+       fill = "Data Source") +
+  scale_color_manual(values = selected_colors) +
+  scale_fill_manual(values = c("Me" = "lightblue", "Others" = spreed_colors, guide = guide)) +
+  custom_theme +
+  guides(color = guide, fill = guide)
+
+SES_plot <- ggplot(SES_comparison, aes(x = DATE, y = AM_Satisfaction_Emotional_Support, color = Group)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE, aes(fill = Group), formula = y ~ x) +
+  labs(y = "Score",
+       x = "Satisfaction Emotional Support",
+       color = "Data Source",
+       fill = "Data Source") +
+  scale_color_manual(values = selected_colors) +
+  scale_fill_manual(values = c("Me" = "lightblue", "Others" = spreed_colors, guide = guide)) +
+  custom_theme +
+  guides(color = guide, fill = guide)
+
+IV_plot <- ggplot(IV_prompts_comparison, aes(x = DATE, y = IV, color = Group)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE, aes(fill = Group), formula = y ~ x) +
+  labs(y = "Type of Prompt",
+       x = "Prompt Selection Over Time",
+       color = "Data Source",
+       fill = "Data Source") +
+  scale_color_manual(values = selected_colors) +
+  scale_fill_manual(values = c("Me" = "lightblue", "Others" = spreed_colors, guide = guide)) +
+  custom_theme +
+  guides(color = guide, fill = guide)
+
+combined_plot <- RA_plot + SIS_plot + SES_plot + IV_plot +
+  plot_layout(ncol = 2, guides = "collect") +
+  plot_annotation(
+    title = "Comparison of Social Media and Social Presence Experiences",
+    theme = theme(plot.title = element_blank(),
+                  legend.key.size = unit(0.3,"cm"),
+                  legend.justification='left',
+                  legend.position = "top",
+                  legend.box = "horizontal"))
+
+print(combined_plot)
+
+ggsave("regression_prompt_satisfaction_plot.pdf", combined_plot, width = 16, height = 9, units = "cm")
+```
+
+## Boxplot prompt type and satisfaction
+
+**Load data**
+
+```{r}
+# Hier deinen Pfad zur Excel-Datei einfügen
+excel_path = "/Users/max/Desktop/IWB data all 2024.xlsx"
+data = read_excel(excel_path, sheet = "Data_scale_values", na = c("", " "))
+```
+
+**Data cleaning**
+
+```{r}
+# convert ID to factor
+data$ID = as.factor(data$ID)
+
+data$STARTED = as.POSIXct(data$STARTED) # POSIXct: contains date and time info
+
+data$DATE = as.Date(data$DATE)
+```
+
+**Get relevant column data**
+
+```{r}
+# Hier deine ID einfügen
+id = "b6qf9a7z"
+
+# Define start and end dates
+start_date <- as.Date("2024-06-03")
+end_date <- as.Date("2024-06-17")
+
+# Create logical vector indicating whether entry is within activity interval, 0 = no, 1 = yes
+data$between <- ifelse(data$DATE >= start_date & data$DATE <= end_date, 1, 0)
+
+data_me <- data %>%
+  filter(between == 1,
+         QUESTNNR == "ChatGPT_Survey",
+         ID == id) %>% 
+  select(IV, AM_Satisfaction_Instrumental_Support, AM_Satisfaction_Emotional_Support)
+
+
+SIS_me <- data_me %>%
+  select(AM_Satisfaction_Instrumental_Support, IV) %>%
+  mutate(AM_Satisfaction_Instrumental_Support = as.numeric(AM_Satisfaction_Instrumental_Support),
+         IV = as.numeric(IV))
+
+SIS_me$Group <- "Instrumental_Support"
+
+SIS_me <- SIS_me %>% 
+  rename(Satisfaction = AM_Satisfaction_Instrumental_Support)
+
+SES_me <- data_me %>%
+  select(AM_Satisfaction_Emotional_Support, IV) %>%
+  mutate(AM_Satisfaction_Emotional_Support = as.numeric(AM_Satisfaction_Emotional_Support),
+         IV = as.numeric(IV))
+
+SES_me$Group <- "Emotional_Support"
+
+SES_me <- SES_me %>% 
+  rename(Satisfaction = AM_Satisfaction_Emotional_Support)
+
+combined_data <- rbind(SIS_me, SES_me)
+```
+
+**Plot the data**
+
+```{r}
+selected_colors <- brewer.pal(6, "Blues")[c(2, 3, 4, 5)]
+
+spreed_colors <- wes_palette("Darjeeling2")[c(1)]
+
+custom_theme <- theme_minimal() +
+  theme(panel.background = element_rect(fill = "grey95", color = NA),
+        panel.grid.major = element_line(color = "white"),
+        panel.grid.minor = element_line(color = "white"),
+        axis.title.x = element_text(size = 8, face = "bold"),
+        #axis.title.x = element_blank(),
+        axis.title.y = element_text(size = 8, face = "bold"),
+        legend.key.size = unit(0.3,"cm"),
+        legend.position = "top",
+        legend.justification='left',
+        legend.box = "horizontal",
+        legend.title = element_text(size = 8, face = "bold"),
+        legend.text = element_text(size = 7))
+
+guide <- guide_legend(byrow = TRUE, title.position = "top", title.hjust = 0)
+
+SES_plot <- ggplot(SES_me, aes(x = factor(IV), y = Satisfaction)) +
+  geom_boxplot(aes(fill = factor(IV))) +
+  labs(x = "Prompt Type", 
+       y = "Emotional Satisfaction",
+       fill = "Prompt Type") +
+  scale_fill_manual(values = selected_colors,
+                    labels = c("1" = "General", 
+                                 "2" = "Emotional", 
+                                 "3" = "Instrumental", 
+                                 "4" = "Emotional & Instrumental")) +
+  scale_x_discrete(labels = c("General", "Emotional", "Instrumental", "Emotional & Instrumental")) +
+    custom_theme +
+  theme(axis.title.x = element_blank()) +
+  guides(color = guide, fill = guide)
+
+SIS_plot <- ggplot(SIS_me, aes(x = factor(IV), y = Satisfaction)) +
+  geom_boxplot(aes(fill = factor(IV))) +
+  labs(x = "Prompt Type", 
+       y = "Instrumental Satisfaction",
+       fill = "Prompt Type") +
+  scale_fill_manual(values = selected_colors,
+                    labels = c("1" = "General", 
+                                 "2" = "Emotional", 
+                                 "3" = "Instrumental", 
+                                 "4" = "Emotional & Instrumental")) +
+  scale_x_discrete(labels = c("General", "Emotional", "Instrumental", "Emotional & Instrumental")) +
+    custom_theme +
+  guides(color = guide, fill = guide)
+
+
+combined_plot <- SES_plot + SIS_plot +
+  plot_layout(ncol = 1, guides = "collect") +
+  plot_annotation(
+    title = "Comparison of Social Media and Social Presence Experiences",
+    theme = theme(plot.title = element_blank(),
+                  legend.key.size = unit(0.3,"cm"),
+                  legend.justification='left',
+                  legend.position = "top",
+                  legend.box = "horizontal"))
+
+print(combined_plot)
+
+ggsave("boxplot_prompt_satisfaction_plot.pdf", combined_plot, width = 16, height = 9.5, units = "cm")
+```
+
